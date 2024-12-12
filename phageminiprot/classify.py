@@ -1,10 +1,9 @@
-import sys
 import os
 import subprocess
 import numpy as np
 from Bio import SeqIO
 import pathlib
-import joblib # Assuming the model is a sklearn model
+import joblib  # Assuming the model is a sklearn model
 
 # Default values for optional arguments
 DEFAULT_MODEL_DIRPATH = 'PhageMiniProt_model'
@@ -22,56 +21,35 @@ def run_embed_command(embed_command):
     env["MKL_SERVICE_FORCE_INTEL"] = "1"
     subprocess.run(embed_command, check=True, env=env)
 
-def main():
-    # Ensure correct number of arguments (at least one argument should be passed)
-    if len(sys.argv) < 2:
-        print("Usage: PhageMiniProt classify <input_sequences.faa>")
-        sys.exit(1)
-
-    # Input FASTA file (first argument)
-    input_file = sys.argv[1]
-
-    # Set the default values for the optional arguments
-    model_dirpath = DEFAULT_MODEL_DIRPATH
-    output_filepath = DEFAULT_OUTPUT_FILEPATH
-    esm_model = DEFAULT_ESM_MODEL
-    layer = DEFAULT_LAYER
-    batch_size = DEFAULT_BATCH_SIZE
-    embed_script = DEFAULT_EMBED_SCRIPT
-    embedding_output = DEFAULT_EMBEDDING_OUTPUT
-
-    # Process any additional options passed via command line
-    for i in range(2, len(sys.argv), 2):
-        if sys.argv[i] == '--model-dirpath':
-            model_dirpath = sys.argv[i+1]
-        elif sys.argv[i] == '--output-filepath':
-            output_filepath = sys.argv[i+1]
-        elif sys.argv[i] == '--esm-model':
-            esm_model = sys.argv[i+1]
-        elif sys.argv[i] == '--layer':
-            layer = int(sys.argv[i+1])  # Convert to integer
-        elif sys.argv[i] == '--batch-size':
-            batch_size = int(sys.argv[i+1])  # Convert to integer
-        elif sys.argv[i] == '--embed-script':
-            embed_script = sys.argv[i+1]
-        elif sys.argv[i] == '--embedding-output':
-            embedding_output = sys.argv[i+1]
-
+def main(input_fasta, model_dirpath, output_filepath, esm_model, layer, batch_size, embed_script, embedding_output):
+    """
+    Classify protein sequences based on their embeddings.
+    
+    Args:
+        input_fasta (str): Path to the input FASTA file containing protein sequences
+        model_dirpath (str): Path to the trained model directory
+        output_filepath (str): Path to save the classification output
+        esm_model (str): ESM model to use for embedding
+        layer (int): Layer to extract embeddings from
+        batch_size (int): Batch size for processing
+        embed_script (str): Path to the embedding script
+        embedding_output (str): Path to save the generated embeddings
+    """
     # Validate input file
-    if not os.path.exists(input_file):
-        print(f"Error: The input file {input_file} does not exist.")
-        sys.exit(1)
+    if not os.path.exists(input_fasta):
+        print(f"Error: The input file {input_fasta} does not exist.")
+        return
 
     # Step 1: Embed the sequences
     classify_script_dir = os.path.dirname(os.path.realpath(__file__))
-    embed_script_path = os.path.join(classify_script_dir, 'embed.py')
+    embed_script_path = os.path.join(classify_script_dir, embed_script)
     print("Generating embeddings...")
     embed_command = [
         "python", embed_script_path,
         "--output-filepath", str(embedding_output),
         "--model", esm_model,
         "--layer", str(layer),
-        input_file
+        input_fasta
     ]
     
     try:
@@ -83,7 +61,7 @@ def main():
     # Step 2: Load embeddings and trained model
     print("Loading embeddings and model...")
     embeddings = np.load(embedding_output)
-    model = joblib.load(pathlib.Path(model_dirpath) / "model.joblib")  # Load the model (ensure it's joblib format)
+    model = joblib.load(pathlib.Path(model_dirpath) / "model.joblib")  # Load the model (ensure it's in joblib format)
 
     # Step 3: Make predictions
     print("Classifying sequences...")
@@ -93,7 +71,7 @@ def main():
     print(f"Saving predictions to {output_filepath}...")
     with open(output_filepath, "w") as f:
         f.write("Sequence_ID,Prediction\n")
-        for record, pred in zip(SeqIO.parse(input_file, "fasta"), predictions):
+        for record, pred in zip(SeqIO.parse(input_fasta, "fasta"), predictions):
             label = "Real" if pred >= 0.5 else "Not Real"
             f.write(f"{record.id},{label}\n")
 
@@ -101,3 +79,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
