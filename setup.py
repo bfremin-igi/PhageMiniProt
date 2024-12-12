@@ -5,14 +5,14 @@ with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
 setup(
-    name="PhageMiniProt",  # Replace with your desired package name
+    name="PhageMiniProt", 
     version="0.1.0",  # Increment version appropriately
     author="Brayon Fremin",
     author_email="bfremin@berkeley.edu",
     description="A tool for classifying phage proteins using MiniProt embeddings.",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/bfremin-igi/PhageMiniProt",  # Updated GitHub URL
+    url="https://github.com/bfremin-igi/PhageMiniProt", 
     packages=find_packages(),  # Automatically find package directories
     entry_points={
         "console_scripts": [
@@ -34,7 +34,7 @@ setup(
     ],
     classifiers=[
         "Programming Language :: Python :: 3",
-        "License :: OSI Approved :: MIT License",  # Adjust if you use a different license
+        "License :: OSI Approved :: MIT License",  
         "Operating System :: OS Independent",
     ],
     python_requires=">=3.7",
