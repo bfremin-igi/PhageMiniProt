@@ -29,7 +29,7 @@ setup(
         "joblib",  # For model serialization
         "biopython",  # For sequence I/O
         "xgboost",  # For XGBoost classifier
-        "esm",  # Likely for embedding model
+        "fair-esm",  # Likely for embedding model
     ],
     classifiers=[
         "Programming Language :: Python :: 3",
