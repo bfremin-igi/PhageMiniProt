@@ -6,7 +6,7 @@ subprocess32
 joblib
 biopython
 xgboost
-esm
+fair-esm
 torch
 tqdm
 scikit-learn
