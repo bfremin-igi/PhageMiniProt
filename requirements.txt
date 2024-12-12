@@ -1,0 +1,12 @@
+os-sys
+pathlib
+click
+numpy
+subprocess32
+joblib
+biopython
+xgboost
+esm
+torch
+tqdm
+scikit-learn
