@@ -1,6 +1,6 @@
-import os
-import click
 import sys
+import click
+from phageminiprot.classify import main as classify_main
 
 @click.group()
 def cli():
@@ -26,113 +26,27 @@ def cli():
               default=4096, 
               type=int, 
               help='Batch size for processing')
-def classify(input_fasta, model_dirpath, output_filepath, esm_model, layer, batch_size):
+@click.option('--embed-script', 
+              default='./embed.py', 
+              help='Path to the embedding script')
+@click.option('--embedding-output', 
+              default='./temp_embeddings.npy', 
+              help='Path to save the generated embeddings')
+def classify(input_fasta, model_dirpath, output_filepath, esm_model, layer, batch_size, embed_script, embedding_output):
     """
     Classify protein sequences from a FASTA file.
     
     INPUT_FASTA: Path to the input FASTA file containing protein sequences
     """
-    from .classify import main as classify_main
-    
-    # Temporarily modify sys.argv to pass arguments to the classify function
-    original_argv = sys.argv
-    sys.argv = [
-        original_argv[0], 
-        input_fasta, 
-        f'--model-dirpath={model_dirpath}',
-        f'--output-filepath={output_filepath}',
-        f'--esm-model={esm_model}',
-        f'--layer={layer}',
-        f'--batch-size={batch_size}'
-    ]
-    
-    try:
-        classify_main()
-    finally:
-        # Restore original sys.argv
-        sys.argv = original_argv
-
-@cli.command()
-@click.argument('input_fasta', type=click.Path(exists=True))
-@click.option('--model-dirpath', 
-              default='PhageMiniProt_model', 
-              help='Directory to save the trained model')
-@click.option('--esm-model', 
-              default='esm2_t6_8M_UR50D', 
-              help='ESM model to use for embedding')
-@click.option('--layer', 
-              default=-1, 
-              type=int, 
-              help='Layer to extract embeddings from')
-@click.option('--batch-size', 
-              default=4096, 
-              type=int, 
-              help='Batch size for processing')
-def train(input_fasta, model_dirpath, esm_model, layer, batch_size):
-    """
-    Train a model on protein sequences from a FASTA file.
-    
-    INPUT_FASTA: Path to the input FASTA file containing protein sequences
-    """
-    from .train import main as train_main
-    
-    # Temporarily modify sys.argv to pass arguments to the train function
-    original_argv = sys.argv
-    sys.argv = [
-        original_argv[0], 
-        input_fasta, 
-        f'--model-dirpath={model_dirpath}',
-        f'--esm-model={esm_model}',
-        f'--layer={layer}',
-        f'--batch-size={batch_size}'
-    ]
-    
-    try:
-        train_main()
-    finally:
-        # Restore original sys.argv
-        sys.argv = original_argv
-
-@cli.command()
-@click.argument('input_fasta', type=click.Path(exists=True))
-@click.option('--output-filepath', 
-              default='./protein_embeddings', 
-              help='Path to save the embeddings')
-@click.option('--esm-model', 
-              default='esm2_t6_8M_UR50D', 
-              help='ESM model to use for embedding')
-@click.option('--layer', 
-              default=-1, 
-              type=int, 
-              help='Layer to extract embeddings from')
-@click.option('--batch-size', 
-              default=4096, 
-              type=int, 
-              help='Batch size for processing')
-def embed(input_fasta, output_filepath, esm_model, layer, batch_size):
-    """
-    Generate embeddings for protein sequences from a FASTA file.
-    
-    INPUT_FASTA: Path to the input FASTA file containing protein sequences
-    """
-    from .embed import main as embed_main
-    
-    # Temporarily modify sys.argv to pass arguments to the embed function
-    original_argv = sys.argv
-    sys.argv = [
-        original_argv[0], 
-        input_fasta, 
-        f'--output-filepath={output_filepath}',
-        f'--esm-model={esm_model}',
-        f'--layer={layer}',
-        f'--batch-size={batch_size}'
-    ]
-    
-    try:
-        embed_main()
-    finally:
-        # Restore original sys.argv
-        sys.argv = original_argv
+    # Pass the click arguments to the classify main function
+    classify_main(input_fasta=input_fasta,
+                  model_dirpath=model_dirpath,
+                  output_filepath=output_filepath,
+                  esm_model=esm_model,
+                  layer=layer,
+                  batch_size=batch_size,
+                  embed_script=embed_script,
+                  embedding_output=embedding_output)
 
 def main():
     """Entry point for the PhageMiniProt CLI."""
@@ -140,3 +54,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
