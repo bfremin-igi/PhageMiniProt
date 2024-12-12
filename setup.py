@@ -20,6 +20,7 @@ setup(
         ],
     },
     install_requires=[
+        "pathlib",
         "numpy",
         "pandas",
         "scikit-learn",
