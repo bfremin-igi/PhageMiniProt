@@ -7,19 +7,6 @@ from joblib import load
 from Bio import SeqIO
 import xgboost as xgb
 
-def main():
-    import sys
-    if len(sys.argv) != 2:
-        print("Usage: PhageMiniProt <input_sequences.faa>")
-        sys.exit(1)
-    input_file = sys.argv[1]
-    # Call your main classification function here
-    print(f"Processing {input_file}...")
-    # Add your logic here
-
-if __name__ == "__main__":
-    main()
-
 def run_embed_command(embed_command):
     env = os.environ.copy()
     env["MKL_THREADING_LAYER"] = "GNU"
