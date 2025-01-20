@@ -25,7 +25,7 @@ pip install .  </pre>
 **Classifying Proteins**: Classify protein sequences in a FASTA file based on a pre-trained model.
 <pre>PhageMiniProt classify test.faa 
   
-#If you want to use the model trained on HMP2 microbiome small proteins:
+#If you want to use MetaMiniProt instead (the model trained on HMP2 microbiome small proteins):
 PhageMiniProt classify test.faa --output-filepath metapred.csv --model-dirpath <path_to_directory>/PhageMiniProt/MetaMiniProt_model </pre>
 
 
