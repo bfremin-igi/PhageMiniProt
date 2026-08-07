@@ -67,7 +67,19 @@ def main(input_fasta, model_dirpath, output_filepath, esm_model, layer, batch_si
     # Step 2: Load embeddings and trained model
     print("Loading embeddings and model...")
     embeddings = np.load(embedding_output)
-    model = joblib.load(pathlib.Path(model_dirpath) / "model.joblib")  # Load the model (ensure it's in joblib format)
+
+    model_path = pathlib.Path(model_dirpath) / "model.joblib"
+    if not model_path.exists():
+        print(
+            f"Error: could not find a trained model at {model_path}.\n"
+            "This usually means the package was installed from a source tree "
+            "where the bundled model files under phageminiprot/models/ were "
+            "missing or not copied correctly. Try reinstalling with:\n"
+            "  pip install . --force-reinstall --no-deps\n"
+            "or pass --model-dirpath explicitly to point at a model directory."
+        )
+        return
+    model = joblib.load(model_path)  # Load the model (ensure it's in joblib format)
 
     # Step 3: Make predictions (labels + probabilities)
     print("Classifying sequences...")
