@@ -1,4 +1,5 @@
 import os
+import sys
 import subprocess
 import numpy as np
 from Bio import SeqIO
@@ -14,6 +15,7 @@ DEFAULT_BATCH_SIZE = 4096
 DEFAULT_EMBED_SCRIPT = './embed.py'
 DEFAULT_EMBEDDING_OUTPUT = './temp_embeddings.npy'
 
+
 def run_embed_command(embed_command):
     """Run the embedding script to generate embeddings."""
     env = os.environ.copy()
@@ -21,10 +23,11 @@ def run_embed_command(embed_command):
     env["MKL_SERVICE_FORCE_INTEL"] = "1"
     subprocess.run(embed_command, check=True, env=env)
 
+
 def main(input_fasta, model_dirpath, output_filepath, esm_model, layer, batch_size, embed_script, embedding_output):
     """
     Classify protein sequences based on their embeddings.
-    
+
     Args:
         input_fasta (str): Path to the input FASTA file containing protein sequences
         model_dirpath (str): Path to the trained model directory
@@ -45,13 +48,16 @@ def main(input_fasta, model_dirpath, output_filepath, esm_model, layer, batch_si
     embed_script_path = os.path.join(classify_script_dir, embed_script)
     print("Generating embeddings...")
     embed_command = [
-        "python", embed_script_path,
+        # Use the interpreter this process is running under (sys.executable),
+        # not whatever "python" happens to resolve to on PATH. This ensures
+        # the embedding subprocess runs in the same env/venv as the CLI itself.
+        sys.executable, embed_script_path,
         "--output-filepath", str(embedding_output),
         "--model", esm_model,
         "--layer", str(layer),
         input_fasta
     ]
-    
+
     try:
         run_embed_command(embed_command)
     except subprocess.CalledProcessError as e:
@@ -63,21 +69,25 @@ def main(input_fasta, model_dirpath, output_filepath, esm_model, layer, batch_si
     embeddings = np.load(embedding_output)
     model = joblib.load(pathlib.Path(model_dirpath) / "model.joblib")  # Load the model (ensure it's in joblib format)
 
-    # Step 3: Make predictions
+    # Step 3: Make predictions (labels + probabilities)
     print("Classifying sequences...")
-    predictions = model.predict(embeddings)  # Directly use embeddings here
+    predictions = model.predict(embeddings)
+    if hasattr(model, "predict_proba"):
+        probabilities = model.predict_proba(embeddings)[:, 1]
+    else:
+        # Fallback for models without predict_proba: use predict() as a 0/1 proxy
+        probabilities = predictions.astype(float)
 
     # Step 4: Save predictions
     print(f"Saving predictions to {output_filepath}...")
     with open(output_filepath, "w") as f:
-        f.write("Sequence_ID,Prediction\n")
-        for record, pred in zip(SeqIO.parse(input_fasta, "fasta"), predictions):
+        f.write("Sequence_ID,Prediction,Probability\n")
+        for record, pred, prob in zip(SeqIO.parse(input_fasta, "fasta"), predictions, probabilities):
             label = "Real" if pred >= 0.5 else "Not Real"
-            f.write(f"{record.id},{label}\n")
+            f.write(f"{record.id},{label},{prob:.6f}\n")
 
     print("Classification completed.")
 
+
 if __name__ == "__main__":
     main()
-
-
