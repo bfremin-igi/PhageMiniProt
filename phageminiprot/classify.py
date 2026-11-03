@@ -1,105 +1,113 @@
+"""Classify protein FASTA sequences with a bundled (or custom) XGBoost model."""
+
 import os
+import pathlib
 import sys
-import subprocess
+import tempfile
+
+import joblib
 import numpy as np
 from Bio import SeqIO
-import pathlib
-import joblib  # Assuming the model is a sklearn model
 
-# Default values for optional arguments
-DEFAULT_MODEL_DIRPATH = 'PhageMiniProt_model'
-DEFAULT_OUTPUT_FILEPATH = './predictions.csv'
-DEFAULT_ESM_MODEL = 'esm2_t6_8M_UR50D'
+from phageminiprot.embed import DEFAULT_TOKS_PER_BATCH, embed_fasta
+
+DEFAULT_OUTPUT_FILEPATH = "./predictions.csv"
+DEFAULT_ESM_MODEL = "esm2_t6_8M_UR50D"
 DEFAULT_LAYER = -1
-DEFAULT_BATCH_SIZE = 4096
-DEFAULT_EMBED_SCRIPT = './embed.py'
-DEFAULT_EMBEDDING_OUTPUT = './temp_embeddings.npy'
+DEFAULT_THRESHOLD = 0.5
+POSITIVE_LABEL = "model-positive"
+NEGATIVE_LABEL = "model-negative"
 
 
-def run_embed_command(embed_command):
-    """Run the embedding script to generate embeddings."""
-    env = os.environ.copy()
-    env["MKL_THREADING_LAYER"] = "GNU"
-    env["MKL_SERVICE_FORCE_INTEL"] = "1"
-    subprocess.run(embed_command, check=True, env=env)
-
-
-def main(input_fasta, model_dirpath, output_filepath, esm_model, layer, batch_size, embed_script, embedding_output):
+def main(
+    input_fasta,
+    model_dirpath,
+    output_filepath=DEFAULT_OUTPUT_FILEPATH,
+    esm_model=DEFAULT_ESM_MODEL,
+    layer=DEFAULT_LAYER,
+    batch_size=DEFAULT_TOKS_PER_BATCH,
+    threshold=DEFAULT_THRESHOLD,
+    embedding_output=None,
+    keep_embeddings=False,
+):
     """
-    Classify protein sequences based on their embeddings.
+    Embed sequences, score with the trained model, write CSV predictions.
 
-    Args:
-        input_fasta (str): Path to the input FASTA file containing protein sequences
-        model_dirpath (str): Path to the trained model directory
-        output_filepath (str): Path to save the classification output
-        esm_model (str): ESM model to use for embedding
-        layer (int): Layer to extract embeddings from
-        batch_size (int): Batch size for processing
-        embed_script (str): Path to the embedding script
-        embedding_output (str): Path to save the generated embeddings
+    Labels follow the manuscript: model-positive / model-negative.
+    A sequence is model-positive when P(positive) >= threshold.
     """
-    # Validate input file
+    input_fasta = str(input_fasta)
     if not os.path.exists(input_fasta):
-        print(f"Error: The input file {input_fasta} does not exist.")
-        return
-
-    # Step 1: Embed the sequences
-    classify_script_dir = os.path.dirname(os.path.realpath(__file__))
-    embed_script_path = os.path.join(classify_script_dir, embed_script)
-    print("Generating embeddings...")
-    embed_command = [
-        # Use the interpreter this process is running under (sys.executable),
-        # not whatever "python" happens to resolve to on PATH. This ensures
-        # the embedding subprocess runs in the same env/venv as the CLI itself.
-        sys.executable, embed_script_path,
-        "--output-filepath", str(embedding_output),
-        "--model", esm_model,
-        "--layer", str(layer),
-        input_fasta
-    ]
-
-    try:
-        run_embed_command(embed_command)
-    except subprocess.CalledProcessError as e:
-        print(f"Error during embedding generation: {e}")
-        return
-
-    # Step 2: Load embeddings and trained model
-    print("Loading embeddings and model...")
-    embeddings = np.load(embedding_output)
+        raise FileNotFoundError(f"Input FASTA not found: {input_fasta}")
 
     model_path = pathlib.Path(model_dirpath) / "model.joblib"
     if not model_path.exists():
-        print(
-            f"Error: could not find a trained model at {model_path}.\n"
-            "This usually means the package was installed from a source tree "
-            "where the bundled model files under phageminiprot/models/ were "
-            "missing or not copied correctly. Try reinstalling with:\n"
-            "  pip install . --force-reinstall --no-deps\n"
-            "or pass --model-dirpath explicitly to point at a model directory."
+        raise FileNotFoundError(
+            f"Could not find a trained model at {model_path}.\n"
+            "Pass --model-dirpath to a directory containing model.joblib, "
+            "or reinstall the package so bundled models are present."
         )
-        return
-    model = joblib.load(model_path)  # Load the model (ensure it's in joblib format)
 
-    # Step 3: Make predictions (labels + probabilities)
-    print("Classifying sequences...")
-    predictions = model.predict(embeddings)
-    if hasattr(model, "predict_proba"):
-        probabilities = model.predict_proba(embeddings)[:, 1]
+    output_filepath = pathlib.Path(output_filepath)
+    output_filepath.parent.mkdir(parents=True, exist_ok=True)
+
+    own_temp = False
+    if embedding_output is None:
+        # Keep temp embeddings beside the output CSV (not CWD / system /tmp).
+        fd, embedding_output = tempfile.mkstemp(
+            prefix="phageminiprot_",
+            suffix=".npy",
+            dir=str(output_filepath.parent),
+        )
+        os.close(fd)
+        own_temp = True
     else:
-        # Fallback for models without predict_proba: use predict() as a 0/1 proxy
-        probabilities = predictions.astype(float)
+        embedding_output = str(embedding_output)
+        pathlib.Path(embedding_output).parent.mkdir(parents=True, exist_ok=True)
 
-    # Step 4: Save predictions
-    print(f"Saving predictions to {output_filepath}...")
-    with open(output_filepath, "w") as f:
-        f.write("Sequence_ID,Prediction,Probability\n")
-        for record, pred, prob in zip(SeqIO.parse(input_fasta, "fasta"), predictions, probabilities):
-            label = "Real" if pred >= 0.5 else "Not Real"
-            f.write(f"{record.id},{label},{prob:.6f}\n")
+    try:
+        print("Generating embeddings...", flush=True)
+        embed_fasta(
+            fasta_file=input_fasta,
+            output_filepath=embedding_output,
+            model_name=esm_model,
+            layer=layer,
+            toks_per_batch=batch_size,
+        )
 
-    print("Classification completed.")
+        print("Loading embeddings and model...", flush=True)
+        embeddings = np.load(embedding_output)
+        model = joblib.load(model_path)
+
+        print("Classifying sequences...", flush=True)
+        if hasattr(model, "predict_proba"):
+            probabilities = model.predict_proba(embeddings)[:, 1]
+        else:
+            probabilities = model.predict(embeddings).astype(float)
+
+        records = list(SeqIO.parse(input_fasta, "fasta"))
+        if len(records) != len(probabilities):
+            raise RuntimeError(
+                f"FASTA has {len(records)} sequences but model scored "
+                f"{len(probabilities)} embeddings."
+            )
+
+        print(f"Saving predictions to {output_filepath}...", flush=True)
+        with open(output_filepath, "w") as f:
+            f.write("Sequence_ID,Prediction,Probability\n")
+            for record, prob in zip(records, probabilities):
+                label = POSITIVE_LABEL if float(prob) >= threshold else NEGATIVE_LABEL
+                f.write(f"{record.id},{label},{float(prob):.6f}\n")
+
+        print("Classification completed.", flush=True)
+    finally:
+        if own_temp and not keep_embeddings and os.path.exists(embedding_output):
+            try:
+                os.remove(embedding_output)
+            except OSError:
+                pass
 
 
 if __name__ == "__main__":
-    main()
+    print("Use: PhageMiniProt classify <fasta> [-o predictions.csv]", file=sys.stderr)
+    sys.exit(2)
